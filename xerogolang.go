@@ -124,6 +124,9 @@ func (p *Provider) newPrivateOrPartnerConsumer(authURL string) *oauth.Consumer {
 // You should always call `xero.New` to get a new Provider. Never try to create
 // one manually.
 func New(clientKey, secret, callbackURL string) *Provider {
+	if len(privateKeyFilePath) == 0 {
+		privateKeyFilePath = os.Getenv("XERO_PRIVATE_KEY_PATH")
+	}
 	p := &Provider{
 		ClientKey:   clientKey,
 		Secret:      secret,
