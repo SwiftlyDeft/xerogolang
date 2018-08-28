@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 
-	"github.com/XeroAPI/xerogolang"
+	"github.com/SwiftlyDeft/xerogolang"
 	"github.com/markbates/goth"
 )
 

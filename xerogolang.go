@@ -17,7 +17,7 @@ import (
 
 	"crypto"
 
-	"github.com/XeroAPI/xerogolang/helpers"
+	"github.com/SwiftlyDeft/xerogolang/helpers"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/mrjones/oauth"
@@ -35,6 +35,7 @@ var (
 	//You only need this for private and partner Applications
 	//more details here: https://developer.xero.com/documentation/api-guides/create-publicprivate-key
 	privateKeyFilePath = os.Getenv("XERO_PRIVATE_KEY_PATH")
+
 )
 
 // Provider is the implementation of `goth.Provider` for accessing Xero.
@@ -49,6 +50,7 @@ type Provider struct {
 	debug           bool
 	consumer        *oauth.Consumer
 	providerName    string
+	CurrentSession goth.Session // Testing for private flow
 }
 
 //newPublicConsumer creates a consumer capable of communicating with a Public application: https://developer.xero.com/documentation/auth-and-limits/public-applications
@@ -84,6 +86,7 @@ func (p *Provider) newPublicConsumer(authURL string) *oauth.Consumer {
 
 //newPartnerConsumer creates a consumer capable of communicating with a Partner application: https://developer.xero.com/documentation/auth-and-limits/partner-applications
 func (p *Provider) newPrivateOrPartnerConsumer(authURL string) *oauth.Consumer {
+	fmt.Println("Generate newPrivateOrPartner consumer")
 	block, _ := pem.Decode([]byte(p.PrivateKey))
 
 	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
@@ -182,6 +185,7 @@ func (p *Provider) Debug(debug bool) {
 // BeginAuth asks Xero for an authentication end-point and a request token for a session.
 // Xero does not support the "state" variable.
 func (p *Provider) BeginAuth(state string) (goth.Session, error) {
+	fmt.Println("Begin auth..")
 	if p.consumer == nil {
 		p.initConsumer()
 	}
@@ -212,6 +216,10 @@ func (p *Provider) BeginAuth(state string) (goth.Session, error) {
 
 //processRequest processes a request prior to it being sent to the API
 func (p *Provider) processRequest(request *http.Request, session goth.Session, additionalHeaders map[string]string) ([]byte, error) {
+	fmt.Println("Process request ", session)
+	if session != nil {
+		p.CurrentSession = session
+	}
 	sess := session.(*Session)
 
 	if p.consumer == nil {
@@ -348,6 +356,7 @@ type OrganisationCollection struct {
 
 // FetchUser will go to Xero and access basic information about the user.
 func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
+	fmt.Println("Fetch user")
 	sess := session.(*Session)
 	user := goth.User{
 		Provider: p.Name(),
@@ -407,21 +416,31 @@ func (p *Provider) RefreshTokenAvailable() bool {
 	return false
 }
 
+// What if we just used a session
 //GetSessionFromStore returns a session for a given a request and a response
 //This is an exaple of how you could get a session from a store - as long as you're
 //supplying a goth.Session to the interactors it will work though so feel free to use your
 //own method
 func (p *Provider) GetSessionFromStore(request *http.Request, response http.ResponseWriter) (goth.Session, error) {
-	sessionMarshalled, _ := gothic.Store.Get(request, "xero"+gothic.SessionName)
+	fmt.Println("Let's print out all the stores? ", gothic.Store)
+	fmt.Println("Get session from store...", request)
+
+	// sessionMarshalled, _ := gothic.Store.Get(request, "xero"+gothic.SessionName)
+	// The gothic session name actually is gothic.SessionName, appending xero will make it hard to find anything as we don't set anything to the session store
+	sessionMarshalled, _ := gothic.Store.Get(request, gothic.SessionName)
+
+	fmt.Println("Session marshalled...", sessionMarshalled)
 	value := sessionMarshalled.Values["xero"]
 	if value == nil {
 		return nil, errors.New("could not find a matching session for this request")
 	}
 	session, err := p.UnmarshalSession(value.(string))
+
 	if err != nil {
 		return nil, errors.New("could not unmarshal session for this request")
 	}
 	sess := session.(*Session)
+
 	if sess.AccessTokenExpires.Before(time.Now().UTC().Add(5 * time.Minute)) {
 		if p.Method == "partner" {
 			p.RefreshOAuth1Token(sess)
